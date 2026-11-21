@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { usePage } from '@inertiajs/react';
+import { X, Hash } from 'lucide-react';
 import type { SharedData } from '@/types';
 import type { FeedPost, PaginatedFeed } from '@/types/post';
 import { PostCard } from './PostCard';
@@ -43,15 +44,20 @@ export const MiddleFeed: React.FC = () => {
   const [isLoading, setIsLoading]   = useState(false);
   const [isInitial, setIsInitial]   = useState(true);
   const [error, setError]           = useState<string | null>(null);
+  const [activeTag, setActiveTag]   = useState<string | null>(null);
   const loaderRef = useRef<HTMLDivElement>(null);
 
-  // ── Fetch a page of posts ─────────────────────────────────────────────────
-  const fetchPage = useCallback(async (pageNum: number) => {
+  // ── Fetch a page of posts (or hashtag posts) ──────────────────────────────
+  const fetchPage = useCallback(async (pageNum: number, tag: string | null = activeTag) => {
     if (isLoading) return;
     setIsLoading(true);
     setError(null);
     try {
-      const res = await apiGet<PaginatedFeed>(`/feed?page=${pageNum}&per_page=10`);
+      const endpoint = tag
+        ? `/feed/hashtag/${encodeURIComponent(tag)}?page=${pageNum}&per_page=10`
+        : `/feed?page=${pageNum}&per_page=10`;
+
+      const res = await apiGet<PaginatedFeed>(endpoint);
       setPosts(prev => pageNum === 1 ? res.data : [...prev, ...res.data]);
       setHasMore(res.has_more);
       setPage(pageNum);
@@ -61,23 +67,23 @@ export const MiddleFeed: React.FC = () => {
       setIsLoading(false);
       setIsInitial(false);
     }
-  }, []);
+  }, [isLoading, activeTag]);
 
   // Initial load
   useEffect(() => {
-    fetchPage(1);
-  }, []);
+    fetchPage(1, activeTag);
+  }, [activeTag]);
 
   // Infinite scroll via IntersectionObserver
   useEffect(() => {
     if (!loaderRef.current) return;
     const observer = new IntersectionObserver(
-      entries => { if (entries[0].isIntersecting && hasMore && !isLoading) fetchPage(page + 1); },
+      entries => { if (entries[0].isIntersecting && hasMore && !isLoading) fetchPage(page + 1, activeTag); },
       { threshold: 0.1 }
     );
     observer.observe(loaderRef.current);
     return () => observer.disconnect();
-  }, [hasMore, isLoading, page, fetchPage]);
+  }, [hasMore, isLoading, page, fetchPage, activeTag]);
 
   // ── State updaters passed into PostCard ───────────────────────────────────
   const handleLikeToggle = (postId: number, liked: boolean, count: number) => {
@@ -96,13 +102,37 @@ export const MiddleFeed: React.FC = () => {
     setPosts(prev => [post, ...prev]);
   };
 
+  const handlePostUpdated = (updated: FeedPost) => {
+    setPosts(prev => prev.map(p => p.id === updated.id ? updated : p));
+  };
+
+  const handleTagClick = (tag: string) => {
+    setActiveTag(tag);
+    setPage(1);
+  };
+
   return (
     <div className="space-y-4 text-left w-full relative">
+
+      {/* ── Active Hashtag Filter Banner ── */}
+      {activeTag && (
+        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40 rounded-2xl p-3 flex items-center justify-between text-xs font-bold text-[#b46d23]">
+          <div className="flex items-center gap-2">
+            <Hash className="w-4 h-4" />
+            <span>Showing posts tagged with #{activeTag}</span>
+          </div>
+          <button
+            onClick={() => setActiveTag(null)}
+            className="flex items-center gap-1 text-[11px] hover:underline"
+          >
+            <X className="w-3.5 h-3.5" /> Clear filter
+          </button>
+        </div>
+      )}
 
       {/* ── Composer trigger card ── */}
       <div className="bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 rounded-2xl p-4 shadow-[0_4px_20px_-4px_rgba(180,109,35,0.03)] space-y-4">
         <div className="flex items-center gap-3">
-          {/* Auth user avatar */}
           {currentUser.avatar_path ? (
             <img
               src={currentUser.avatar_path}
@@ -115,7 +145,6 @@ export const MiddleFeed: React.FC = () => {
             </div>
           )}
           <div className="flex-1 min-w-0">
-            {/* The PostComposer renders a styled trigger button inline here */}
             <PostComposer
               currentUser={currentUser}
               onPostCreated={handlePostCreated}
@@ -132,7 +161,7 @@ export const MiddleFeed: React.FC = () => {
         <div className="bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-2xl p-10 text-center">
           <p className="text-sm text-red-500 font-medium">{error}</p>
           <button
-            onClick={() => fetchPage(1)}
+            onClick={() => fetchPage(1, activeTag)}
             className="mt-4 text-xs font-bold text-[#b46d23] hover:underline"
           >
             Try again
@@ -141,7 +170,9 @@ export const MiddleFeed: React.FC = () => {
       ) : posts.length === 0 ? (
         <div className="bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-2xl p-10 text-center">
           <p className="text-2xl mb-2">🌱</p>
-          <p className="text-sm font-bold text-zinc-700 dark:text-zinc-300">The feed is empty</p>
+          <p className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
+            {activeTag ? `No posts found tagged #${activeTag}` : 'The feed is empty'}
+          </p>
           <p className="text-xs text-zinc-400 mt-1">Be the first to post something!</p>
         </div>
       ) : (
@@ -154,6 +185,8 @@ export const MiddleFeed: React.FC = () => {
               onLikeToggle={handleLikeToggle}
               onBookmarkToggle={handleBookmarkToggle}
               onDelete={handleDelete}
+              onPostUpdated={handlePostUpdated}
+              onTagClick={handleTagClick}
               showAuthor={true}
             />
           ))}

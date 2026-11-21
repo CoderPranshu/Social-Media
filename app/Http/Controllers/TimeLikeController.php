@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\TimeCapsule;
 use App\Models\TimeLike;
+use App\Notifications\PostLikedNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +17,8 @@ class TimeLikeController extends Controller
      */
     public function toggle(Request $request, TimeCapsule $post): JsonResponse
     {
-        $userId = $request->user()->id;
+        $user   = $request->user();
+        $userId = $user->id;
 
         $existingLike = TimeLike::where('user_id', $userId)
             ->where('post_id', $post->id)
@@ -26,7 +28,6 @@ class TimeLikeController extends Controller
             // Unlike
             DB::transaction(function () use ($existingLike, $post) {
                 $existingLike->delete();
-                // Keep the string column in sync (clamped at 0)
                 $post->likes = max(0, (int) $post->likes - 1);
                 $post->save();
             });
@@ -44,13 +45,17 @@ class TimeLikeController extends Controller
             });
 
             $liked = true;
+
+            // Send notification to author (never notify yourself)
+            if ($post->user && (int) $post->user_id !== $userId) {
+                $post->user->notify(new PostLikedNotification($user, $post));
+            }
         }
 
-        // Return the real count from the relational table
         $count = TimeLike::where('post_id', $post->id)->count();
 
         return response()->json([
-            'liked'      => $liked,
+            'liked'       => $liked,
             'likes_count' => $count,
         ]);
     }

@@ -8,6 +8,8 @@ use App\Http\Controllers\TimeCapsuleController;
 use App\Http\Controllers\TimeLikeController;
 use App\Http\Controllers\TimeCommentController;
 use App\Http\Controllers\PostBookmarkController;
+use App\Http\Controllers\FollowController;
+use App\Http\Controllers\NotificationController;
 
 Route::get('/', function () {
     return Inertia::render('welcome');
@@ -36,6 +38,9 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/feed', [TimeCapsuleController::class, 'feed'])
         ->name('posts.feed');
+
+    Route::get('/feed/hashtag/{tag}', [TimeCapsuleController::class, 'byHashtag'])
+        ->name('posts.hashtag');
 
     Route::get('/posts/{post}', [TimeCapsuleController::class, 'show'])
         ->name('posts.show');
@@ -69,6 +74,39 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/bookmarks', [PostBookmarkController::class, 'index'])
         ->name('bookmarks.index');
+
+    // ── Shares ──────────────────────────────────────────────────────────────
+    Route::post('/posts/{post}/share', [TimeCapsuleController::class, 'share'])
+        ->name('posts.share');
+
+    // ── Follows & Mentions ──────────────────────────────────────────────────
+    Route::post('/users/{user}/follow', [FollowController::class, 'toggle'])
+        ->name('users.follow');
+
+    Route::get('/users/search', [FollowController::class, 'search'])
+        ->name('users.search');
+
+    Route::get('/users/{user}/followers', [FollowController::class, 'followers'])
+        ->name('users.followers');
+
+    Route::get('/users/{user}/following', [FollowController::class, 'following'])
+        ->name('users.following');
+
+    // ── Notifications API ───────────────────────────────────────────────────
+    Route::get('/api/notifications', [NotificationController::class, 'index'])
+        ->name('notifications.index');
+
+    Route::post('/api/notifications/read-all', [NotificationController::class, 'markAllAsRead'])
+        ->name('notifications.readAll');
+
+    Route::post('/api/notifications/{id}/read', [NotificationController::class, 'markAsRead'])
+        ->name('notifications.read');
+
+    Route::delete('/api/notifications/{id}', [NotificationController::class, 'destroy'])
+        ->name('notifications.destroy');
+
+    Route::get('/api/notifications/unread-count', [NotificationController::class, 'unreadCount'])
+        ->name('notifications.unreadCount');
 
 });
 

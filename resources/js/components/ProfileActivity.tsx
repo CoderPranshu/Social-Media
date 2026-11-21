@@ -91,6 +91,13 @@ export const ProfileActivity: React.FC = () => {
     setPosts(prev => [post, ...prev]);
   };
 
+  const handlePostUpdated = (updated: FeedPost) => {
+    const update = (list: FeedPost[]) =>
+      list.map(p => p.id === updated.id ? updated : p);
+    setPosts(update);
+    setBookmarks(update);
+  };
+
   const handleScroll = (direction: 'left' | 'right') => {
     sliderRef.current?.scrollBy({ left: direction === 'left' ? -340 : 340, behavior: 'smooth' });
   };
@@ -165,6 +172,7 @@ export const ProfileActivity: React.FC = () => {
                   onLikeToggle={handleLikeToggle}
                   onBookmarkToggle={handleBookmarkToggle}
                   onDelete={handleDelete}
+                  onPostUpdated={handlePostUpdated}
                   showAuthor={false}
                 />
               </div>

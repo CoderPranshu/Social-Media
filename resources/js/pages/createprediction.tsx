@@ -4,6 +4,7 @@ import {
   Calendar, DollarSign, Percent, Plus, X, 
   HelpCircle, Eye, Globe, Lock, AlertCircle, CheckCircle2 
 } from 'lucide-react';
+import { apiPost } from '@/lib/api';
 
 export default function CreatePrediction() {
   // Form State Nodes
@@ -24,6 +25,7 @@ export default function CreatePrediction() {
   // Visibility and Success States
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   // Categories list aligned with platform themes
   const categories = ['Technology', 'Finance', 'Geopolitics', 'Sports', 'Pop Culture', 'Science'];
@@ -47,11 +49,27 @@ export default function CreatePrediction() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulate API pipeline dispatch
-    setIsSubmitted(true);
-    setTimeout(() => setIsSubmitted(false), 4000);
+    if (!title.trim() || submitting) return;
+    setSubmitting(true);
+    try {
+      const tagText = tags.map(t => `#${t.replace(/^#/, '')}`).join(' ');
+      const content = `${title.trim()}\n\n${description.trim()}\n\n${tagText}`.trim();
+      await apiPost('/posts', {
+        post_content: content,
+        visibility: visibility === 'private' ? 'only_me' : 'public',
+      });
+      setIsSubmitted(true);
+      setTimeout(() => {
+        setIsSubmitted(false);
+        window.location.href = '/dashboard';
+      }, 1500);
+    } catch {
+      alert('Could not publish prediction.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (

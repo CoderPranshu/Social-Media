@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Storage;
 test('authenticated users can publish and reload long text posts', function () {
     $user = User::factory()->create();
     $otherUser = User::factory()->create();
-    $content = str_repeat('A saved social post. ', 20);
+    $content = trim(str_repeat('A saved social post. ', 20));
 
     $response = $this->actingAs($user)
         ->postJson('/posts', ['post_content' => $content])
@@ -17,7 +17,7 @@ test('authenticated users can publish and reload long text posts', function () {
 
     $this->assertDatabaseHas('time_capsules', [
         'id' => $postId,
-        'user_id' => (string) $user->id,
+        'user_id' => $user->id,
         'post_content' => $content,
         'status' => 'published',
     ]);
@@ -45,12 +45,12 @@ test('authenticated users can publish image posts and reload their image', funct
     $response = $this->actingAs($user)
         ->postJson('/posts', [
             'post_content' => 'An image post',
-            'image' => UploadedFile::fake()->image('post.jpg'),
+            'image' => UploadedFile::fake()->create('post.jpg', 50, 'image/jpeg'),
         ])
         ->assertCreated();
     expect($response->json('post.id'))->toBeInt();
 
-    $post = TimeCapsule::where('user_id', (string) $user->id)->firstOrFail();
+    $post = TimeCapsule::where('user_id', $user->id)->firstOrFail();
 
     Storage::disk('public')->assertExists($post->image);
 
@@ -58,5 +58,5 @@ test('authenticated users can publish image posts and reload their image', funct
         ->getJson('/my-posts')
         ->assertOk()
         ->assertJsonPath('0.post_content', 'An image post')
-        ->assertJsonPath('0.image', Storage::disk('public')->url($post->image));
+        ->assertJsonPath('0.images.0', Storage::disk('public')->url($post->image));
 });

@@ -12,11 +12,6 @@ class User extends Authenticatable
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
     protected $fillable = [
         'name',
         'email',
@@ -28,26 +23,56 @@ class User extends Authenticatable
         'cover_path',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
-            'password' => 'hashed',
+            'password'          => 'hashed',
         ];
+    }
+
+    // ─── Relationships ───────────────────────────────────────────────────────
+
+    public function posts()
+    {
+        return $this->hasMany(TimeCapsule::class, 'user_id');
+    }
+
+    /** Users this user is following */
+    public function following()
+    {
+        return $this->belongsToMany(User::class, 'follows', 'follower_id', 'following_id')
+            ->withTimestamps();
+    }
+
+    /** Users who follow this user */
+    public function followers()
+    {
+        return $this->belongsToMany(User::class, 'follows', 'following_id', 'follower_id')
+            ->withTimestamps();
+    }
+
+    // ─── Helpers ─────────────────────────────────────────────────────────────
+
+    public function isFollowing(int $userId): bool
+    {
+        return Follow::where('follower_id', $this->id)
+            ->where('following_id', $userId)
+            ->exists();
+    }
+
+    public function followersCount(): int
+    {
+        return Follow::where('following_id', $this->id)->count();
+    }
+
+    public function followingCount(): int
+    {
+        return Follow::where('follower_id', $this->id)->count();
     }
 }

@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\TimeCapsule;
 use App\Models\TimeComment;
+use App\Notifications\CommentRepliedNotification;
+use App\Notifications\PostCommentedNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +18,11 @@ class TimeCommentController extends Controller
      */
     public function index(Request $request, TimeCapsule $post): JsonResponse
     {
+        // Privacy check
+        if (!$request->user()->can('view', $post)) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
         $comments = TimeComment::with(['user', 'replies.user'])
             ->where('post_id', $post->id)
             ->whereNull('parent_id')
@@ -31,34 +38,49 @@ class TimeCommentController extends Controller
      */
     public function store(Request $request, TimeCapsule $post): JsonResponse
     {
+        // Privacy check
+        if (!$request->user()->can('view', $post)) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
         $validated = $request->validate([
             'comment'   => 'required|string|max:2000',
             'parent_id' => 'nullable|integer|exists:time_comments,id',
         ]);
 
-        $comment = DB::transaction(function () use ($request, $post, $validated) {
+        $user = $request->user();
+
+        $comment = DB::transaction(function () use ($user, $post, $validated) {
             $c = TimeComment::create([
-                'user_id'   => $request->user()->id,
+                'user_id'   => $user->id,
                 'post_id'   => $post->id,
                 'comment'   => $validated['comment'],
                 'parent_id' => $validated['parent_id'] ?? null,
             ]);
 
-            // Update the string counter on the post
-            if (!$validated['parent_id']) {
-                $post->comments_count = TimeComment::where('post_id', $post->id)
-                    ->whereNull('parent_id')
-                    ->count();
-                $post->save();
-            }
+            // Always update comments counter on the post
+            $post->comments_count = TimeComment::where('post_id', $post->id)->count();
+            $post->save();
 
             return $c;
         });
 
         $comment->load(['user', 'replies.user']);
 
+        // Notifications
+        if (!empty($validated['parent_id'])) {
+            $parent = TimeComment::with('user')->find($validated['parent_id']);
+            if ($parent && $parent->user && (int) $parent->user_id !== $user->id) {
+                $parent->user->notify(new CommentRepliedNotification($user, $post, $parent, $comment));
+            }
+        } else {
+            if ($post->user && (int) $post->user_id !== $user->id) {
+                $post->user->notify(new PostCommentedNotification($user, $post, $comment));
+            }
+        }
+
         return response()->json([
-            'message' => 'Comment added.',
+            'message' => 'Comment added successfully.',
             'comment' => $this->formatComment($comment),
         ], 201);
     }
@@ -68,8 +90,8 @@ class TimeCommentController extends Controller
      */
     public function destroy(Request $request, TimeCapsule $post, TimeComment $comment): JsonResponse
     {
-        if ($comment->user_id != $request->user()->id) {
-            return response()->json(['message' => 'Unauthorized.'], 403);
+        if ((int) $comment->user_id !== (int) $request->user()->id) {
+            return response()->json(['message' => 'Unauthorized. You can only delete your own comments.'], 403);
         }
 
         DB::transaction(function () use ($comment, $post) {
@@ -77,9 +99,7 @@ class TimeCommentController extends Controller
             $comment->replies()->delete();
             $comment->delete();
 
-            $post->comments_count = TimeComment::where('post_id', $post->id)
-                ->whereNull('parent_id')
-                ->count();
+            $post->comments_count = TimeComment::where('post_id', $post->id)->count();
             $post->save();
         });
 
@@ -91,8 +111,8 @@ class TimeCommentController extends Controller
      */
     public function update(Request $request, TimeCapsule $post, TimeComment $comment): JsonResponse
     {
-        if ($comment->user_id != $request->user()->id) {
-            return response()->json(['message' => 'Unauthorized.'], 403);
+        if ((int) $comment->user_id !== (int) $request->user()->id) {
+            return response()->json(['message' => 'Unauthorized. You can only edit your own comments.'], 403);
         }
 
         $validated = $request->validate([

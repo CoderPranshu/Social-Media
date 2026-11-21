@@ -14,13 +14,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearchChange }) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // 2. Use Inertia page hook to track the active URL pathway cleanly
-  const { url } = usePage();
+  const { url, props } = usePage<any>();
   const currentPath = url;
+  const user = props.auth?.user;
+  const unreadCount = props.auth?.unread_notifications_count ?? 0;
 
   const navItems = [
     { id: 'Home', label: 'Home', icon: Home, href: '/dashboard' },
     { id: 'People', label: 'People', icon: Users, href: '/followersfollowing' },
-    { id: 'Notifications', label: 'Notifications', icon: Bell, badge: 2, href: '/notification' },
+    { id: 'Notifications', label: 'Notifications', icon: Bell, badge: unreadCount > 0 ? unreadCount : undefined, href: '/notification' },
   ];
 
   useEffect(() => {
@@ -105,8 +107,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearchChange }) => {
                 onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
                 className="flex flex-col items-center justify-center min-w-[60px] h-[54px] text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 bg-transparent border-none cursor-pointer rounded-xl transition group text-center no-underline focus:outline-none"
               >
-                <div className="w-6 h-6 rounded-full overflow-hidden bg-zinc-100 border border-zinc-200 dark:border-zinc-700 shadow-sm shrink-0 transition group-hover:border-zinc-300">
-                  <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=100" alt="Me" className="w-full h-full object-cover" />
+                <div className="w-6 h-6 rounded-full overflow-hidden bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm shrink-0 transition group-hover:border-zinc-300 flex items-center justify-center text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                  {user?.avatar_path ? (
+                    <img src={user.avatar_path} alt={user?.name ?? 'Me'} className="w-full h-full object-cover" />
+                  ) : (
+                    <span>{(user?.name ?? 'U').slice(0, 2).toUpperCase()}</span>
+                  )}
                 </div>
                 <span className="text-[10px] font-bold tracking-tight mt-1 flex items-center select-none">
                   Me <ChevronDown className={`w-3 h-3 ml-0.5 opacity-70 group-hover:opacity-100 transition-transform duration-200 ${isProfileDropdownOpen ? 'rotate-180' : ''}`} />
@@ -137,13 +143,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearchChange }) => {
         {/* Far Left Avatar Toggle */}
         <button 
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="w-8 h-8 rounded-full overflow-hidden border border-zinc-200 dark:border-zinc-700 shadow-sm shrink-0 outline-none focus:ring-2 focus:ring-[#b46d23]/40"
+          className="w-8 h-8 rounded-full overflow-hidden border border-zinc-200 dark:border-zinc-700 shadow-sm shrink-0 outline-none focus:ring-2 focus:ring-[#b46d23]/40 flex items-center justify-center bg-zinc-100 dark:bg-zinc-800 text-xs font-bold text-zinc-600 dark:text-zinc-300"
         >
-          <img 
-            src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=100" 
-            alt="Toggle Menu" 
-            className="w-full h-full object-cover"
-          />
+          {user?.avatar_path ? (
+            <img src={user.avatar_path} alt="Toggle Menu" className="w-full h-full object-cover" />
+          ) : (
+            <span>{(user?.name ?? 'U').slice(0, 2).toUpperCase()}</span>
+          )}
         </button>
 
         {/* Center Search Input */}

@@ -37,6 +37,7 @@ class HandleInertiaRequests extends Middleware
                     'bio'         => $user->bio ?? null,
                     'location'    => $user->location ?? null,
                 ] : null,
+                'unread_notifications_count' => $user ? $user->unreadNotifications()->count() : 0,
             ],
         ]);
     }

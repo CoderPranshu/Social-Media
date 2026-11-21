@@ -1,9 +1,9 @@
-import React, { useState, useRef, ChangeEvent } from 'react';
+import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
 import {
-  X, Image, Trash2, Globe, Users2, Lock, Check, Send
+  X, Image, Trash2, Globe, Users2, Lock, Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { apiPost } from '@/lib/api';
+import { apiPost, apiGet } from '@/lib/api';
 import type { FeedPost } from '@/types/post';
 
 type VisibilityType = 'public' | 'followers' | 'only_me';
@@ -13,6 +13,13 @@ interface AuthUser {
   name: string;
   username?: string | null;
   avatar_path?: string | null;
+}
+
+interface MentionUser {
+  id: number;
+  name: string;
+  username: string | null;
+  avatar_path: string | null;
 }
 
 interface PostComposerProps {
@@ -51,9 +58,74 @@ export const PostComposer: React.FC<PostComposerProps> = ({
   const [files, setFiles]                     = useState<File[]>([]);
   const [isPosting, setIsPosting]             = useState(false);
   const [error, setError]                     = useState<string | null>(null);
+
+  // Mention autocomplete state
+  const [mentionQuery, setMentionQuery]       = useState<string | null>(null);
+  const [mentionSuggestions, setMentionSuggestions] = useState<MentionUser[]>([]);
+  const [cursorPos, setCursorPos]             = useState<number>(0);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const canPost = text.trim().length > 0 || files.length > 0;
+
+  // Handle mention detection when typing in textarea
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    const pos = e.target.selectionStart;
+    setText(val);
+    setCursorPos(pos);
+
+    // Look at text up to current cursor position
+    const textUpToCursor = val.slice(0, pos);
+    const match = textUpToCursor.match(/@([a-zA-Z0-9_]*)$/);
+
+    if (match) {
+      setMentionQuery(match[1]);
+    } else {
+      setMentionQuery(null);
+      setMentionSuggestions([]);
+    }
+  };
+
+  // Debounced search for mentions
+  useEffect(() => {
+    if (mentionQuery === null) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const users = await apiGet<MentionUser[]>(`/users/search?q=${encodeURIComponent(mentionQuery)}`);
+        setMentionSuggestions(users);
+      } catch {
+        setMentionSuggestions([]);
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [mentionQuery]);
+
+  const selectMention = (username: string) => {
+    if (!textareaRef.current) return;
+    const textUpToCursor = text.slice(0, cursorPos);
+    const lastAtPos = textUpToCursor.lastIndexOf('@');
+    if (lastAtPos === -1) return;
+
+    const before = text.slice(0, lastAtPos);
+    const after = text.slice(cursorPos);
+    const newText = `${before}@${username} ${after}`;
+
+    setText(newText);
+    setMentionQuery(null);
+    setMentionSuggestions([]);
+
+    const newCursor = lastAtPos + username.length + 2;
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(newCursor, newCursor);
+      }
+    }, 10);
+  };
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(e.target.files ?? []);
@@ -81,6 +153,9 @@ export const PostComposer: React.FC<PostComposerProps> = ({
   };
 
   const clearComposer = () => {
+    if (canPost && !isPosting) {
+      if (!window.confirm('Discard your draft?')) return;
+    }
     previews.forEach(URL.revokeObjectURL);
     setText('');
     setFiles([]);
@@ -89,6 +164,8 @@ export const PostComposer: React.FC<PostComposerProps> = ({
     setShowVisMenu(false);
     setIsOpen(false);
     setError(null);
+    setMentionQuery(null);
+    setMentionSuggestions([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -103,14 +180,22 @@ export const PostComposer: React.FC<PostComposerProps> = ({
       form.append('visibility', visibility);
 
       if (files.length === 1) {
-        // Use legacy `image` field for single image (backward compat)
         form.append('image', files[0]);
       } else {
         files.forEach(f => form.append('images[]', f));
       }
 
       const res = await apiPost<{ message: string; post: FeedPost }>('/posts', form);
-      clearComposer();
+      previews.forEach(URL.revokeObjectURL);
+      setText('');
+      setFiles([]);
+      setPreviews([]);
+      setVisibility('public');
+      setShowVisMenu(false);
+      setIsOpen(false);
+      setMentionQuery(null);
+      setMentionSuggestions([]);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       onPostCreated(res.post);
     } catch (err: unknown) {
       const e = err as { data?: { errors?: Record<string, string[]>; message?: string } };
@@ -124,9 +209,13 @@ export const PostComposer: React.FC<PostComposerProps> = ({
     }
   };
 
+  // Extract preview hashtags from current text
+  const detectedTags = Array.from(new Set(
+    (text.match(/#[a-zA-Z0-9_]+/g) ?? []).map(t => t.toLowerCase())
+  ));
+
   return (
     <>
-      {/* Hidden file input */}
       <input
         type="file"
         ref={fileInputRef}
@@ -136,7 +225,6 @@ export const PostComposer: React.FC<PostComposerProps> = ({
         multiple
       />
 
-      {/* Trigger */}
       <button
         onClick={() => setIsOpen(true)}
         className="bg-[#b46d23] hover:bg-[#965a1c] text-white text-xs font-extrabold px-4 py-2 rounded-full transition-colors flex items-center gap-1 shadow-sm active:scale-95"
@@ -144,7 +232,6 @@ export const PostComposer: React.FC<PostComposerProps> = ({
         {triggerLabel}
       </button>
 
-      {/* Modal */}
       <AnimatePresence>
         {isOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -162,7 +249,7 @@ export const PostComposer: React.FC<PostComposerProps> = ({
               transition={{ type: 'spring', duration: 0.35 }}
               className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 w-full max-w-[550px] rounded-2xl flex flex-col shadow-2xl relative z-10 overflow-hidden"
             >
-              {/* Modal header */}
+              {/* Header */}
               <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between relative">
                 <div className="flex items-center gap-3">
                   <Avatar url={currentUser.avatar_path} name={currentUser.name} />
@@ -173,7 +260,6 @@ export const PostComposer: React.FC<PostComposerProps> = ({
                     {currentUser.username && (
                       <p className="text-[10px] text-zinc-400">@{currentUser.username}</p>
                     )}
-                    {/* Visibility picker */}
                     <button
                       type="button"
                       onClick={() => setShowVisMenu(p => !p)}
@@ -204,16 +290,49 @@ export const PostComposer: React.FC<PostComposerProps> = ({
                 </button>
               </div>
 
-              {/* Body */}
-              <div className="p-4 flex-1 flex flex-col gap-3 max-h-[400px] overflow-y-auto">
+              {/* Textarea & Mentions */}
+              <div className="p-4 flex-1 flex flex-col gap-3 max-h-[400px] overflow-y-auto relative">
                 <textarea
+                  ref={textareaRef}
                   rows={4}
                   autoFocus
                   value={text}
-                  onChange={e => setText(e.target.value)}
-                  placeholder="What's on your mind?"
+                  onChange={handleTextChange}
+                  placeholder="What's on your mind? Use #hashtag or @mention"
                   className="w-full bg-transparent border-none text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 outline-none resize-none leading-relaxed"
                 />
+
+                {/* Mention suggestions popover */}
+                {mentionSuggestions.length > 0 && (
+                  <div className="border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded-xl shadow-lg p-1 max-h-48 overflow-y-auto space-y-0.5">
+                    <p className="text-[10px] font-bold text-zinc-400 px-2 py-1 uppercase tracking-wider">Mention a user</p>
+                    {mentionSuggestions.map(user => (
+                      <button
+                        key={user.id}
+                        type="button"
+                        onClick={() => selectMention(user.username ?? user.name)}
+                        className="w-full text-left flex items-center gap-2 p-2 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 rounded-lg transition"
+                      >
+                        <Avatar url={user.avatar_path} name={user.name} />
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate">{user.name}</p>
+                          {user.username && <p className="text-[10px] text-zinc-400">@{user.username}</p>}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Detected hashtags pill preview */}
+                {detectedTags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {detectedTags.map(tag => (
+                      <span key={tag} className="text-[11px] font-bold text-[#b46d23] bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 rounded-md border border-amber-200/50 dark:border-amber-900/40">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
 
                 {/* Image previews */}
                 {previews.length > 0 && (
@@ -246,7 +365,7 @@ export const PostComposer: React.FC<PostComposerProps> = ({
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     className="p-2 text-emerald-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition"
-                    title="Add image"
+                    title="Add image(s)"
                   >
                     <Image className="w-4 h-4" />
                   </button>
@@ -271,4 +390,3 @@ export const PostComposer: React.FC<PostComposerProps> = ({
     </>
   );
 };
-

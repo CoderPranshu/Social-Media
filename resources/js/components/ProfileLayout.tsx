@@ -145,8 +145,16 @@ export const ProfileLayout: React.FC<ProfileLayoutProps> = ({ profile }) => {
                   <span className="text-[#b46d23] cursor-pointer text-[11px] hover:scale-105 transition-transform">✏️</span>
                 </div>
                 <div className="flex items-center justify-between gap-2 text-xs text-zinc-500 font-medium bg-zinc-50/50 dark:bg-zinc-800/30 border border-zinc-100 dark:border-zinc-800/50 p-2 rounded-xl min-w-0">
-                  <span className="truncate text-zinc-600 dark:text-zinc-400 flex-1">predictionhub.com/in/isha-singh</span>
-                  <Copy className="w-3.5 h-3.5 text-zinc-400 cursor-pointer hover:text-[#b46d23] shrink-0" />
+                  <span className="truncate text-zinc-600 dark:text-zinc-400 flex-1">
+                    predictionhub.com/u/{profile.username ?? profile.id}
+                  </span>
+                  <Copy 
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/u/${profile.username ?? profile.id}`);
+                      alert('Profile URL copied!');
+                    }}
+                    className="w-3.5 h-3.5 text-zinc-400 cursor-pointer hover:text-[#b46d23] shrink-0" 
+                  />
                 </div>
               </div>
             </div>
@@ -156,11 +164,11 @@ export const ProfileLayout: React.FC<ProfileLayoutProps> = ({ profile }) => {
               <h4 className="text-xs font-black text-zinc-900 dark:text-zinc-100 tracking-tight mb-3">Profile overview</h4>
               <div className="space-y-3">
                 {[
-                  { label: 'Predictions made', val: '24' },
-                  { label: 'Upvotes received', val: '1.2K' },
-                  { label: 'Comments', val: '156' },
-                  { label: 'Followers', val: '448' },
-                  { label: 'Following', val: '132' }
+                  { label: 'Posts made', val: String(profile.posts_count ?? 0) },
+                  { label: 'Likes received', val: String(profile.likes_count ?? 0) },
+                  { label: 'Comments received', val: String(profile.comments_count ?? 0) },
+                  { label: 'Followers', val: String(profile.followers_count ?? 0) },
+                  { label: 'Following', val: String(profile.following_count ?? 0) }
                 ].map((item) => (
                   <div key={item.label} className="flex justify-between items-center text-xs font-bold">
                     <span className="text-zinc-400">{item.label}</span>

@@ -17,15 +17,24 @@ class SocialProfileController extends Controller
     {
         $user = $request->user();
 
+        $postIds = $user->posts()->pluck('id');
+        $likesCount = \App\Models\TimeLike::whereIn('post_id', $postIds)->count();
+        $commentsCount = \App\Models\TimeComment::whereIn('post_id', $postIds)->count();
+
         return Inertia::render('profile', [
             'profile' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'username' => $user->username,
-                'bio' => $user->bio,
-                'location' => $user->location,
-                'avatar_path' => $user->avatar_path,
-                'cover_path' => $user->cover_path,
+                'id'              => $user->id,
+                'name'            => $user->name,
+                'username'        => $user->username,
+                'bio'             => $user->bio,
+                'location'        => $user->location,
+                'avatar_path'     => $user->avatar_path ? Storage::disk('public')->url($user->avatar_path) : null,
+                'cover_path'      => $user->cover_path ? Storage::disk('public')->url($user->cover_path) : null,
+                'followers_count' => $user->followersCount(),
+                'following_count' => $user->followingCount(),
+                'posts_count'     => $postIds->count(),
+                'likes_count'     => $likesCount,
+                'comments_count'  => $commentsCount,
             ],
         ]);
     }

@@ -5,6 +5,13 @@ export interface PostAuthor {
   name: string;
   username: string | null;
   avatar_path: string | null;
+  is_following?: boolean;
+}
+
+export interface PostMentionItem {
+  id: number;
+  name: string;
+  username: string | null;
 }
 
 export interface FeedPost {
@@ -20,6 +27,8 @@ export interface FeedPost {
   is_liked: boolean;
   is_bookmarked: boolean;
   images: string[];          // absolute storage URLs
+  hashtags?: string[];
+  mentions?: PostMentionItem[];
   author: PostAuthor | null;
 }
 
@@ -39,5 +48,5 @@ export interface PaginatedFeed {
   per_page: number;
   total: number;
   has_more: boolean;
+  tag?: string;
 }
-

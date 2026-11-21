@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import {
   ThumbsUp, MessageSquare, Repeat2, Bookmark,
   MoreHorizontal, Trash2, Edit2, Globe, Users, Lock,
-  Send, X, CornerDownRight, ChevronLeft, ChevronRight
+  Send, X, CornerDownRight, ChevronLeft, ChevronRight,
+  Plus, Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { FeedPost, FeedComment, PostAuthor } from '@/types/post';
-import { apiPost, apiDelete, apiGet } from '@/lib/api';
+import type { FeedPost, FeedComment } from '@/types/post';
+import { apiPost, apiDelete, apiGet, apiPut } from '@/lib/api';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,36 @@ function Avatar({ url, name, size = 10 }: { url?: string | null; name?: string |
     : <div className={cls}>{initials}</div>;
 }
 
+/** Format content with clickable hashtags and mentions */
+function renderFormattedContent(text: string, onTagClick?: (tag: string) => void) {
+  const parts = text.split(/(#[a-zA-Z0-9_]+|@[a-zA-Z0-9_]+)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('#')) {
+      const tag = part.slice(1);
+      return (
+        <span
+          key={i}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onTagClick) onTagClick(tag);
+          }}
+          className="text-[#b46d23] hover:underline font-semibold cursor-pointer"
+        >
+          {part}
+        </span>
+      );
+    }
+    if (part.startsWith('@')) {
+      return (
+        <span key={i} className="text-[#b46d23] font-semibold">
+          {part}
+        </span>
+      );
+    }
+    return part;
+  });
+}
+
 // ─── ImageGallery ─────────────────────────────────────────────────────────────
 
 function ImageGallery({ images }: { images: string[] }) {
@@ -53,7 +84,6 @@ function ImageGallery({ images }: { images: string[] }) {
   return (
     <div className="relative w-full border-t border-b border-zinc-100 dark:border-zinc-800/60 overflow-hidden max-h-[500px] bg-zinc-50 dark:bg-zinc-950 group">
       <img src={images[current]} alt={`Image ${current + 1}`} className="w-full object-cover select-none" />
-      {/* Nav arrows */}
       <button
         onClick={() => setCurrent(p => Math.max(0, p - 1))}
         disabled={current === 0}
@@ -68,7 +98,6 @@ function ImageGallery({ images }: { images: string[] }) {
       >
         <ChevronRight className="w-4 h-4" />
       </button>
-      {/* Dots */}
       <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
         {images.map((_, i) => (
           <button
@@ -85,13 +114,36 @@ function ImageGallery({ images }: { images: string[] }) {
 // ─── CommentItem ─────────────────────────────────────────────────────────────
 
 function CommentItem({
-  comment, currentUserId, onDelete, onReply
+  comment, postId, currentUserId, onDelete, onReply, onUpdate
 }: {
   comment: FeedComment;
+  postId: number;
   currentUserId: number;
   onDelete: (id: number) => void;
   onReply: (parentId: number, name: string) => void;
+  onUpdate: (updated: FeedComment) => void;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText]   = useState(comment.comment);
+  const [saving, setSaving]       = useState(false);
+
+  const handleSaveEdit = async () => {
+    if (!editText.trim() || saving) return;
+    setSaving(true);
+    try {
+      const res = await apiPut<{ message: string; comment: FeedComment }>(
+        `/posts/${postId}/comments/${comment.id}`,
+        { comment: editText.trim() }
+      );
+      onUpdate(res.comment);
+      setIsEditing(false);
+    } catch {
+      alert('Could not update comment.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex items-start gap-2 group/comment">
@@ -103,23 +155,62 @@ function CommentItem({
             </span>
             <span className="text-[10px] text-zinc-400">{timeAgo(comment.created_at)}</span>
           </div>
-          <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5 leading-relaxed">{comment.comment}</p>
-          <div className="flex items-center gap-3 mt-1.5">
-            <button
-              onClick={() => onReply(comment.id, comment.author?.name ?? '')}
-              className="text-[10px] font-bold text-zinc-400 hover:text-[#b46d23] transition"
-            >
-              Reply
-            </button>
-            {comment.author?.id === currentUserId && (
+
+          {isEditing ? (
+            <div className="mt-1 space-y-1.5">
+              <input
+                type="text"
+                value={editText}
+                onChange={e => setEditText(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSaveEdit()}
+                className="w-full text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-1.5 outline-none text-zinc-800 dark:text-zinc-100"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={saving || !editText.trim()}
+                  className="text-[10px] font-bold text-white bg-[#b46d23] px-2 py-0.5 rounded transition disabled:opacity-50"
+                >
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+                <button
+                  onClick={() => { setIsEditing(false); setEditText(comment.comment); }}
+                  className="text-[10px] font-bold text-zinc-400 hover:text-zinc-600 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5 leading-relaxed">{comment.comment}</p>
+          )}
+
+          {!isEditing && (
+            <div className="flex items-center gap-3 mt-1.5">
               <button
-                onClick={() => onDelete(comment.id)}
-                className="text-[10px] font-bold text-zinc-400 hover:text-red-500 transition opacity-0 group-hover/comment:opacity-100"
+                onClick={() => onReply(comment.id, comment.author?.name ?? '')}
+                className="text-[10px] font-bold text-zinc-400 hover:text-[#b46d23] transition"
               >
-                Delete
+                Reply
               </button>
-            )}
-          </div>
+              {comment.author?.id === currentUserId && (
+                <>
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="text-[10px] font-bold text-zinc-400 hover:text-[#b46d23] transition opacity-0 group-hover/comment:opacity-100"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => onDelete(comment.id)}
+                    className="text-[10px] font-bold text-zinc-400 hover:text-red-500 transition opacity-0 group-hover/comment:opacity-100"
+                  >
+                    Delete
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -127,27 +218,15 @@ function CommentItem({
       {comment.replies.length > 0 && (
         <div className="ml-10 space-y-2">
           {comment.replies.map(reply => (
-            <div key={reply.id} className="flex items-start gap-2 group/reply">
-              <CornerDownRight className="w-3 h-3 text-zinc-300 dark:text-zinc-700 mt-2 shrink-0" />
-              <Avatar url={reply.author?.avatar_path} name={reply.author?.name} size={7} />
-              <div className="flex-1 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl px-3 py-2 text-left">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-extrabold text-zinc-900 dark:text-zinc-100">
-                    {reply.author?.name ?? 'Unknown'}
-                  </span>
-                  <span className="text-[10px] text-zinc-400">{timeAgo(reply.created_at)}</span>
-                </div>
-                <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5 leading-relaxed">{reply.comment}</p>
-                {reply.author?.id === currentUserId && (
-                  <button
-                    onClick={() => onDelete(reply.id)}
-                    className="text-[10px] font-bold text-zinc-400 hover:text-red-500 mt-1 transition opacity-0 group-hover/reply:opacity-100"
-                  >
-                    Delete
-                  </button>
-                )}
-              </div>
-            </div>
+            <CommentItem
+              key={reply.id}
+              comment={reply}
+              postId={postId}
+              currentUserId={currentUserId}
+              onDelete={onDelete}
+              onReply={onReply}
+              onUpdate={onUpdate}
+            />
           ))}
         </div>
       )}
@@ -163,40 +242,63 @@ interface PostCardProps {
   onLikeToggle: (postId: number, liked: boolean, count: number) => void;
   onBookmarkToggle: (postId: number, bookmarked: boolean) => void;
   onDelete?: (postId: number) => void;
-  onEdit?: (post: FeedPost) => void;
+  onPostUpdated?: (updated: FeedPost) => void;
+  onTagClick?: (tag: string) => void;
   showAuthor?: boolean;
 }
 
 export const PostCard: React.FC<PostCardProps> = ({
-  post, currentUser, onLikeToggle, onBookmarkToggle, onDelete, onEdit, showAuthor = true
+  post: initialPost,
+  currentUser,
+  onLikeToggle,
+  onBookmarkToggle,
+  onDelete,
+  onPostUpdated,
+  onTagClick,
+  showAuthor = true
 }) => {
-  const [liking, setLiking] = useState(false);
-  const [bookmarking, setBookmarking] = useState(false);
-  const [showComments, setShowComments] = useState(false);
-  const [comments, setComments]         = useState<FeedComment[]>([]);
-  const [commentsLoaded, setCommentsLoaded] = useState(false);
-  const [commentText, setCommentText]   = useState('');
-  const [replyTo, setReplyTo]           = useState<{ id: number; name: string } | null>(null);
-  const [submitting, setSubmitting]     = useState(false);
-  const [showMenu, setShowMenu]         = useState(false);
+  const [post, setPost] = useState<FeedPost>(initialPost);
+
+  // Sync with prop if it changes
+  React.useEffect(() => {
+    setPost(initialPost);
+  }, [initialPost]);
+
+  const [liking, setLiking]                   = useState(false);
+  const [bookmarking, setBookmarking]         = useState(false);
+  const [following, setFollowing]             = useState(false);
+  const [showComments, setShowComments]       = useState(false);
+  const [comments, setComments]               = useState<FeedComment[]>([]);
+  const [commentsLoaded, setCommentsLoaded]   = useState(false);
+  const [commentText, setCommentText]         = useState('');
+  const [replyTo, setReplyTo]                 = useState<{ id: number; name: string } | null>(null);
+  const [submitting, setSubmitting]           = useState(false);
+  const [showMenu, setShowMenu]               = useState(false);
+
+  // Edit post state
+  const [isEditingPost, setIsEditingPost]     = useState(false);
+  const [editContent, setEditContent]         = useState(post.post_content ?? '');
+  const [editVisibility, setEditVisibility]   = useState(post.visibility);
+  const [savingPost, setSavingPost]           = useState(false);
 
   const isOwner = post.author?.id === currentUser.id;
 
   // ── Like toggle ─────────────────────────────────────────────────
   const handleLike = async () => {
     if (liking) return;
-    // Optimistic update
-    onLikeToggle(
-      post.id,
-      !post.is_liked,
-      post.is_liked ? post.likes_count - 1 : post.likes_count + 1
-    );
+    const newLiked = !post.is_liked;
+    const newCount = newLiked ? post.likes_count + 1 : Math.max(0, post.likes_count - 1);
+
+    setPost(p => ({ ...p, is_liked: newLiked, likes_count: newCount }));
+    onLikeToggle(post.id, newLiked, newCount);
     setLiking(true);
+
     try {
       const res = await apiPost<{ liked: boolean; likes_count: number }>(`/posts/${post.id}/like`);
+      setPost(p => ({ ...p, is_liked: res.liked, likes_count: res.likes_count }));
       onLikeToggle(post.id, res.liked, res.likes_count);
     } catch {
-      // Rollback optimistic update
+      setPost(p => ({ ...p, is_liked: post.is_liked, likes_count: post.likes_count }));
       onLikeToggle(post.id, post.is_liked, post.likes_count);
     } finally {
       setLiking(false);
@@ -206,15 +308,48 @@ export const PostCard: React.FC<PostCardProps> = ({
   // ── Bookmark toggle ──────────────────────────────────────────────
   const handleBookmark = async () => {
     if (bookmarking) return;
-    onBookmarkToggle(post.id, !post.is_bookmarked);
+    const newBm = !post.is_bookmarked;
+    setPost(p => ({ ...p, is_bookmarked: newBm }));
+    onBookmarkToggle(post.id, newBm);
     setBookmarking(true);
+
     try {
       const res = await apiPost<{ bookmarked: boolean }>(`/posts/${post.id}/bookmark`);
+      setPost(p => ({ ...p, is_bookmarked: res.bookmarked }));
       onBookmarkToggle(post.id, res.bookmarked);
     } catch {
+      setPost(p => ({ ...p, is_bookmarked: post.is_bookmarked }));
       onBookmarkToggle(post.id, post.is_bookmarked);
     } finally {
       setBookmarking(false);
+    }
+  };
+
+  // ── Follow toggle ────────────────────────────────────────────────
+  const handleFollow = async () => {
+    if (!post.author || following) return;
+    const currentFollowingState = !!post.author.is_following;
+    const nextState = !currentFollowingState;
+
+    setPost(p => ({
+      ...p,
+      author: p.author ? { ...p.author, is_following: nextState } : null
+    }));
+    setFollowing(true);
+
+    try {
+      const res = await apiPost<{ is_following: boolean }>(`/users/${post.author.id}/follow`);
+      setPost(p => ({
+        ...p,
+        author: p.author ? { ...p.author, is_following: res.is_following } : null
+      }));
+    } catch {
+      setPost(p => ({
+        ...p,
+        author: p.author ? { ...p.author, is_following: currentFollowingState } : null
+      }));
+    } finally {
+      setFollowing(false);
     }
   };
 
@@ -239,6 +374,7 @@ export const PostCard: React.FC<PostCardProps> = ({
         comment:   commentText.trim(),
         parent_id: replyTo?.id ?? null,
       });
+
       if (replyTo) {
         setComments(prev => prev.map(c =>
           c.id === replyTo.id
@@ -247,6 +383,7 @@ export const PostCard: React.FC<PostCardProps> = ({
         ));
       } else {
         setComments(prev => [res.comment, ...prev]);
+        setPost(p => ({ ...p, comments_count: p.comments_count + 1 }));
       }
       setCommentText('');
       setReplyTo(null);
@@ -255,37 +392,77 @@ export const PostCard: React.FC<PostCardProps> = ({
     }
   };
 
+  // ── Update comment in list ───────────────────────────────────────
+  const handleCommentUpdated = (updated: FeedComment) => {
+    const updateList = (list: FeedComment[]): FeedComment[] =>
+      list.map(c =>
+        c.id === updated.id
+          ? { ...c, comment: updated.comment }
+          : { ...c, replies: updateList(c.replies) }
+      );
+    setComments(prev => updateList(prev));
+  };
+
   // ── Delete comment ───────────────────────────────────────────────
   const handleDeleteComment = async (commentId: number) => {
     try {
       await apiDelete(`/posts/${post.id}/comments/${commentId}`);
       setComments(prev => {
-        // Remove top-level or nested reply
         const removeFromList = (list: FeedComment[]): FeedComment[] =>
           list
             .filter(c => c.id !== commentId)
-            .map(c => ({ ...c, replies: c.replies.filter(r => r.id !== commentId) }));
+            .map(c => ({ ...c, replies: removeFromList(c.replies) }));
         return removeFromList(prev);
       });
+      setPost(p => ({ ...p, comments_count: Math.max(0, p.comments_count - 1) }));
     } catch { /* silent */ }
+  };
+
+  // ── Save post edit ───────────────────────────────────────────────
+  const handleSavePostEdit = async () => {
+    if (savingPost) return;
+    setSavingPost(true);
+    try {
+      const res = await apiPut<{ message: string; post: FeedPost }>(
+        `/posts/${post.id}`,
+        { post_content: editContent, visibility: editVisibility }
+      );
+      setPost(res.post);
+      onPostUpdated?.(res.post);
+      setIsEditingPost(false);
+    } catch {
+      alert('Could not update post.');
+    } finally {
+      setSavingPost(false);
+    }
   };
 
   // ── Share ────────────────────────────────────────────────────────
   const handleShare = async () => {
     const url = `${window.location.origin}/posts/${post.id}`;
+    let didShare = false;
     try {
       if (navigator.share) {
         await navigator.share({ title: 'Check out this post', url });
+        didShare = true;
       } else {
         await navigator.clipboard.writeText(url);
         alert('Link copied to clipboard!');
+        didShare = true;
       }
-    } catch { /* user cancelled */ }
+    } catch { /* user cancelled share */ }
+
+    if (didShare) {
+      try {
+        const res = await apiPost<{ shares_count: number }>(`/posts/${post.id}/share`);
+        setPost(p => ({ ...p, shares_count: res.shares_count }));
+      } catch { /* silent */ }
+    }
   };
 
   // ── Delete post ──────────────────────────────────────────────────
   const handleDeletePost = async () => {
-    if (!confirm('Delete this post?')) return;
+    if (!confirm('Are you sure you want to delete this post?')) return;
     try {
       await apiDelete(`/posts/${post.id}`);
       onDelete?.(post.id);
@@ -317,10 +494,36 @@ export const PostCard: React.FC<PostCardProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-1 shrink-0 relative">
+          <div className="flex items-center gap-1.5 shrink-0 relative">
+            {/* Follow / Following button if author is another user */}
+            {!isOwner && post.author && (
+              <button
+                onClick={handleFollow}
+                disabled={following}
+                className={`flex items-center space-x-1 border px-2.5 py-1 rounded-xl text-[11px] font-bold transition shadow-none ${
+                  post.author.is_following
+                    ? 'border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'
+                    : 'border-[#b46d23]/40 text-[#b46d23] hover:bg-amber-50/50 dark:hover:bg-amber-950/20'
+                }`}
+              >
+                {post.author.is_following ? (
+                  <>
+                    <Check className="w-3 h-3 stroke-[3]" />
+                    <span>Following</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-3 h-3 stroke-[3]" />
+                    <span>Follow</span>
+                  </>
+                )}
+              </button>
+            )}
+
             <button
               onClick={handleBookmark}
               className="p-1.5 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition"
+              title={post.is_bookmarked ? 'Remove bookmark' : 'Bookmark post'}
             >
               <Bookmark className={`w-4 h-4 transition-colors ${post.is_bookmarked ? 'text-[#b46d23] fill-[#b46d23]' : 'text-zinc-400'}`} />
             </button>
@@ -341,14 +544,12 @@ export const PostCard: React.FC<PostCardProps> = ({
                       exit={{ opacity: 0, scale: 0.95, y: -5 }}
                       className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-xl shadow-xl z-20 py-1 overflow-hidden"
                     >
-                      {onEdit && (
-                        <button
-                          onClick={() => { setShowMenu(false); onEdit(post); }}
-                          className="w-full text-left px-3 py-2 text-xs font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/40 flex items-center gap-2 transition"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" /> Edit post
-                        </button>
-                      )}
+                      <button
+                        onClick={() => { setShowMenu(false); setIsEditingPost(true); setEditContent(post.post_content ?? ''); setEditVisibility(post.visibility); }}
+                        className="w-full text-left px-3 py-2 text-xs font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/40 flex items-center gap-2 transition"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" /> Edit post
+                      </button>
                       <button
                         onClick={() => { setShowMenu(false); handleDeletePost(); }}
                         className="w-full text-left px-3 py-2 text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 flex items-center gap-2 transition"
@@ -368,13 +569,28 @@ export const PostCard: React.FC<PostCardProps> = ({
       {post.post_content && (
         <div className="px-5 pb-3">
           <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed whitespace-pre-line font-normal">
-            {post.post_content}
+            {renderFormattedContent(post.post_content, onTagClick)}
           </p>
         </div>
       )}
 
       {/* ── Images ── */}
       <ImageGallery images={post.images} />
+
+      {/* ── Hashtags section ── */}
+      {post.hashtags && post.hashtags.length > 0 && (
+        <div className="px-5 py-2.5 flex flex-wrap gap-1.5 border-t border-zinc-100/60 dark:border-zinc-800/40">
+          {post.hashtags.map(tag => (
+            <span
+              key={tag}
+              onClick={() => onTagClick?.(tag)}
+              className="bg-zinc-50 text-zinc-500 dark:bg-zinc-800/40 dark:text-zinc-400 border border-zinc-100 dark:border-zinc-800/80 px-2.5 py-0.5 rounded-lg text-[11px] font-bold cursor-pointer hover:border-[#b46d23]/30 hover:text-[#b46d23] transition-all"
+            >
+              #{tag}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* ── Metric counts ── */}
       <div className="px-5 py-2.5 flex items-center gap-4 text-[11px] text-zinc-400 dark:text-zinc-500 font-bold border-t border-zinc-100/60 dark:border-zinc-800/40 select-none">
@@ -428,7 +644,6 @@ export const PostCard: React.FC<PostCardProps> = ({
             className="overflow-hidden"
           >
             <div className="bg-zinc-50/50 dark:bg-zinc-950/40 border-t border-zinc-100 dark:border-zinc-800/60 p-4 space-y-4">
-              {/* Reply indicator */}
               {replyTo && (
                 <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 rounded-xl px-3 py-1.5 text-xs font-bold text-[#b46d23]">
                   <span>Replying to {replyTo.name}</span>
@@ -465,9 +680,11 @@ export const PostCard: React.FC<PostCardProps> = ({
                     <CommentItem
                       key={c.id}
                       comment={c}
+                      postId={post.id}
                       currentUserId={currentUser.id}
                       onDelete={handleDeleteComment}
                       onReply={(id, name) => setReplyTo({ id, name })}
+                      onUpdate={handleCommentUpdated}
                     />
                   ))}
                 </div>
@@ -480,7 +697,78 @@ export const PostCard: React.FC<PostCardProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Edit Post Modal ── */}
+      <AnimatePresence>
+        {isEditingPost && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsEditingPost(false)}
+              className="absolute inset-0 bg-zinc-950/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 15 }}
+              className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 w-full max-w-[500px] rounded-2xl flex flex-col shadow-2xl relative z-10 overflow-hidden text-left"
+            >
+              <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                <h3 className="text-sm font-extrabold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                  <Edit2 className="w-4 h-4 text-[#b46d23]" /> Edit Post
+                </h3>
+                <button
+                  onClick={() => setIsEditingPost(false)}
+                  className="p-1 text-zinc-400 hover:text-zinc-600 rounded-lg"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-3">
+                <textarea
+                  rows={5}
+                  value={editContent}
+                  onChange={e => setEditContent(e.target.value)}
+                  placeholder="Update your post content..."
+                  className="w-full bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700/80 rounded-xl p-3 text-sm text-zinc-900 dark:text-zinc-100 outline-none resize-none leading-relaxed focus:border-[#b46d23]"
+                />
+
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-zinc-500">Visibility:</label>
+                  <select
+                    value={editVisibility}
+                    onChange={e => setEditVisibility(e.target.value as 'public' | 'followers' | 'only_me')}
+                    className="text-xs font-bold bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1 text-zinc-700 dark:text-zinc-200 outline-none"
+                  >
+                    <option value="public">Anyone (Public)</option>
+                    <option value="followers">Followers only</option>
+                    <option value="only_me">Only me</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="p-3 border-t border-zinc-100 dark:border-zinc-800 flex justify-end gap-2 bg-zinc-50/50 dark:bg-zinc-950/30">
+                <button
+                  onClick={() => setIsEditingPost(false)}
+                  className="h-8 px-4 text-zinc-500 font-bold text-xs rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSavePostEdit}
+                  disabled={savingPost}
+                  className="h-8 px-5 bg-[#b46d23] hover:bg-[#965a1b] disabled:opacity-50 text-white font-bold text-xs rounded-full shadow transition"
+                >
+                  {savingPost ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
-

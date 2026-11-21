@@ -2,6 +2,7 @@ import { LucideIcon } from 'lucide-react';
 
 export interface Auth {
     user: User;
+    unread_notifications_count?: number;
 }
 
 export interface BreadcrumbItem {
