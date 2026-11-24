@@ -10,6 +10,7 @@ use App\Http\Controllers\TimeCommentController;
 use App\Http\Controllers\PostBookmarkController;
 use App\Http\Controllers\FollowController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\DashboardController;
 
 Route::get('/', function () {
     return Inertia::render('welcome');
@@ -25,9 +26,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/profile', [SocialProfileController::class, 'update'])
         ->name('social-profile.update');
 
-    Route::get('/dashboard', function () {
-        return Inertia::render('dashboard');
-    })->name('dashboard');
+    Route::get('/dashboard', [DashboardController::class, 'index'])
+        ->name('dashboard');
 
     // ── Post CRUD ───────────────────────────────────────────────────────────
     Route::post('/posts', [TimeCapsuleController::class, 'store'])

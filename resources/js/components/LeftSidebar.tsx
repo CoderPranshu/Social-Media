@@ -1,7 +1,6 @@
 import React from 'react';
-// 1. Change the import from react-router-dom to @inertiajs/react
 import { Link, usePage } from '@inertiajs/react';
-import { Home, Flame, Clock, Compass, Bookmark, HelpCircle, Users, Layers } from 'lucide-react';
+import { Home, Flame, Bell, Compass, Bookmark, HelpCircle, Users, Layers } from 'lucide-react';
 import { SidebarFooter } from './ui/sidebar';
 import { NavUser } from './nav-user';
 
@@ -9,61 +8,103 @@ interface LeftSidebarProps {
   viewMode?: 'desktop' | 'mobile' | 'all';
 }
 
+interface UserStats {
+  posts_count: number;
+  followers_count: number;
+  following_count: number;
+  likes_received: number;
+}
+
 export const LeftSidebar: React.FC<LeftSidebarProps> = ({ viewMode = 'all' }) => {
-  // 2. Inertia tracks URLs via usePage()
-  const { url } = usePage();
+  const { url, props } = usePage<any>();
   const currentPath = url;
 
+  const user = props.auth?.user;
+  const unreadCount: number = props.auth?.unread_notifications_count ?? 0;
+
+  // Stats are passed from DashboardController on /dashboard; fall back to 0 on other pages.
+  const stats: UserStats = (props as any).userStats ?? {
+    posts_count: 0,
+    followers_count: 0,
+    following_count: 0,
+    likes_received: 0,
+  };
+
+  const displayName = user?.name ?? 'You';
+  const displayUsername = user?.username ? `@${user.username}` : user?.email ?? '';
+  const avatarUrl: string | null = user?.avatar_path ?? null;
+  const initials = displayName.slice(0, 2).toUpperCase();
+
   const topNavs = [
-    { label: 'Home', icon: Home, to: '/dashboard' },
-    { label: 'Popular', icon: Flame, to: '/popularfeed' },
-    { label: 'Notification', icon: Clock, to: '/notification' },
-    { label: 'Follower', icon: Users, to: '/followersfollowing' },
-    { label: 'Explore', icon: Compass, to: '/dashboard' },
+    { label: 'Home',         icon: Home,    to: '/dashboard' },
+    { label: 'Popular',      icon: Flame,   to: '/popularfeed' },
+    {
+      label: 'Notification',
+      icon: Bell,
+      to: '/notification',
+      badge: unreadCount > 0 ? unreadCount : undefined,
+    },
+    { label: 'Follower',  icon: Users,    to: '/followersfollowing' },
+    { label: 'Explore',   icon: Compass,  to: '/allpost' },
   ];
 
   const bottomNavs = [
-    { label: 'Saved', icon: Bookmark, to: '/saved' },
-    { label: 'My Predictions', icon: Layers, to: '/allpost' },
-    { label: 'About', icon: HelpCircle, to: '/about' },
+    { label: 'Saved',          icon: Bookmark,   to: '/saved' },
+    { label: 'My Posts',       icon: Layers,     to: '/allpost' },
+    { label: 'About',          icon: HelpCircle, to: '/about' },
   ];
 
   const mobileNavs = [
-    { label: 'Home', icon: Home, to: '/dashboard' },
-    { label: 'Popular', icon: Flame, to: '/popularfeed' },
-    { label: 'Latest', icon: Clock, to: '/latest' },
-    { label: 'Saved', icon: Bookmark, to: '/saved' },
+    { label: 'Home',    icon: Home,     to: '/dashboard' },
+    { label: 'Popular', icon: Flame,    to: '/popularfeed' },
+    { label: 'Alerts',  icon: Bell,     to: '/notification', badge: unreadCount > 0 ? unreadCount : undefined },
+    { label: 'Saved',   icon: Bookmark, to: '/saved' },
   ];
 
   const renderDesktop = () => (
     <div className="w-full max-w-[260px] space-y-4">
       <div className="relative overflow-hidden rounded-2xl border border-[#e5ca9a]/60 dark:border-[#b46d23]/30 bg-gradient-to-b from-white/95 via-[#fffdf9]/95 to-white/98 dark:from-zinc-900/95 dark:via-zinc-900/98 dark:to-zinc-950 shadow-[0_10px_30px_-12px_rgba(180,109,35,0.08)] text-left transition-all duration-300 hover:shadow-[0_15px_35px_-10px_rgba(180,109,35,0.18)] hover:border-[#b46d23]/50 group/card">
 
-        {/* Header Profile Box Container */}
+        {/* Profile Header */}
         <div className="relative pt-6 pb-4 text-center border-b border-zinc-100 dark:border-zinc-800/60">
           <div className="absolute top-0 left-0 right-0 h-24 overflow-hidden pointer-events-none z-0">
             <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-[#dfc58a] via-[#cc9643] to-[#ebd3a2] dark:from-[#4a3b1e] dark:via-[#6e5327] dark:to-transparent rounded-b-[45%] scale-x-110 origin-top shadow-sm transition-transform duration-500 group-hover/card:scale-y-105" />
           </div>
 
-          {/* Using Inertia Link href instead of to */}
           <Link href="/profile" className="block w-[74px] h-[74px] rounded-full border-[3px] dark:border-zinc-900 ring-2 ring-[#e5ca9a]/50 dark:ring-[#b46d23]/30 overflow-hidden mx-auto bg-zinc-50 relative z-10 transition-all duration-500 ease-out hover:scale-105 hover:shadow-lg hover:ring-[#b46d23]/60">
-            <img
-              src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"
-              alt="Isha Singh"
-              className="w-full h-full object-cover transition-transform duration-700 ease-out hover:scale-110"
-            />
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={displayName}
+                className="w-full h-full object-cover transition-transform duration-700 ease-out hover:scale-110"
+              />
+            ) : (
+              <span className="w-full h-full flex items-center justify-center bg-[#b46d23]/10 text-[#b46d23] text-lg font-black">
+                {initials}
+              </span>
+            )}
           </Link>
 
           <div className="relative z-10">
             <Link href="/profile" className="inline-block no-underline group/name">
               <h5 className="font-extrabold text-zinc-900 dark:text-zinc-100 mt-3 text-sm tracking-tight transition-colors duration-200 group-hover/card:text-[#b46d23] group-hover/name:underline">
-                Isha Singh
+                {displayName}
               </h5>
             </Link>
-            <p className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 mt-0.5 tracking-wide">
-              Full Stack Developer
-            </p>
+            {displayUsername && (
+              <p className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 mt-0.5 tracking-wide">
+                {displayUsername}
+              </p>
+            )}
           </div>
+        </div>
+
+        {/* Stats Row */}
+        <div className="grid grid-cols-4 divide-x divide-zinc-100 dark:divide-zinc-800/60 py-3 px-1 border-b border-zinc-100 dark:border-zinc-800/60">
+          <StatItem value={stats.posts_count} label="Posts" href="/allpost" />
+          <StatItem value={stats.followers_count} label="Followers" href="/followersfollowing" />
+          <StatItem value={stats.following_count} label="Following" href="/followersfollowing" />
+          <StatItem value={stats.likes_received} label="Likes" href="/allpost" />
         </div>
 
         {/* Navigation Links */}
@@ -83,7 +124,14 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ viewMode = 'all' }) =>
                 }`}
               >
                 {isActive && <span className="absolute left-0 top-3 bottom-3 w-0.5 bg-[#b46d23] rounded-r-full" />}
-                <Icon className={`w-4 h-4 stroke-[2.25] transition-transform duration-200 group-hover/item:scale-110 ${isActive ? 'text-[#b46d23]' : 'text-zinc-400 group-hover/item:text-[#b46d23]'}`} />
+                <div className="relative flex-shrink-0">
+                  <Icon className={`w-4 h-4 stroke-[2.25] transition-transform duration-200 group-hover/item:scale-110 ${isActive ? 'text-[#b46d23]' : 'text-zinc-400 group-hover/item:text-[#b46d23]'}`} />
+                  {(item as any).badge && (
+                    <span className="absolute -top-1.5 -right-1.5 bg-[#cc1016] text-white text-[8px] font-extrabold px-1 min-w-[14px] h-3.5 rounded-full flex items-center justify-center border border-white dark:border-zinc-900 shadow-sm">
+                      {(item as any).badge > 99 ? '99+' : (item as any).badge}
+                    </span>
+                  )}
+                </div>
                 <span className="transition-transform duration-200 group-hover/item:translate-x-0.5">{item.label}</span>
               </Link>
             );
@@ -134,12 +182,18 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ viewMode = 'all' }) =>
             >
               <div className="relative flex items-center justify-center">
                 <Icon className={`w-[22px] h-[22px] stroke-[2] ${isActive ? 'text-zinc-950 dark:white stroke-[2.25]' : ''}`} />
+                {(item as any).badge && (
+                  <span className="absolute -top-1.5 -right-2 bg-[#cc1016] text-white text-[8px] font-extrabold px-1 min-w-[14px] h-3.5 rounded-full flex items-center justify-center border border-white dark:border-zinc-950 shadow-sm">
+                    {(item as any).badge > 99 ? '99+' : (item as any).badge}
+                  </span>
+                )}
               </div>
               <span className="text-[10px] tracking-tight font-medium">{item.label}</span>
             </Link>
           );
         })}
 
+        {/* Profile avatar in mobile nav */}
         <Link
           href="/profile"
           className={`flex flex-col items-center justify-center flex-1 h-full space-y-1 no-underline transition-colors duration-200 ${
@@ -149,11 +203,11 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ viewMode = 'all' }) =>
           <div className={`w-6 h-6 rounded-full overflow-hidden border-2 transition-all flex items-center justify-center ${
             currentPath === '/profile' ? 'border-zinc-900 dark:border-white' : 'border-zinc-300 dark:border-zinc-700'
           }`}>
-            <img
-              src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=50&auto=format&fit=crop&q=80"
-              alt="Profile View"
-              className="w-full h-full object-cover"
-            />
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-[9px] font-bold">{initials}</span>
+            )}
           </div>
           <span className="text-[10px] font-medium tracking-tight">Profile</span>
         </Link>
@@ -168,3 +222,13 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ viewMode = 'all' }) =>
     </>
   );
 };
+
+// ── Helper ─────────────────────────────────────────────────────────────────────
+const StatItem: React.FC<{ value: number; label: string; href: string }> = ({ value, label, href }) => (
+  <Link href={href} className="flex flex-col items-center py-1 no-underline group">
+    <span className="text-xs font-black text-zinc-900 dark:text-zinc-100 group-hover:text-[#b46d23] transition-colors">
+      {value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}
+    </span>
+    <span className="text-[9px] font-semibold text-zinc-400 dark:text-zinc-500 mt-0.5 tracking-wide">{label}</span>
+  </Link>
+);
