@@ -6,6 +6,7 @@ import {
   Plus, Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Link } from '@inertiajs/react';
 import type { FeedPost, FeedComment } from '@/types/post';
 import { apiPost, apiDelete, apiGet, apiPut } from '@/lib/api';
 
@@ -57,10 +58,16 @@ function renderFormattedContent(text: string, onTagClick?: (tag: string) => void
       );
     }
     if (part.startsWith('@')) {
+      const mentionUsername = part.slice(1);
       return (
-        <span key={i} className="text-[#b46d23] font-semibold">
+        <Link
+          key={i}
+          href={`/users/${mentionUsername}`}
+          className="text-[#b46d23] font-semibold hover:underline no-underline"
+          onClick={(e) => e.stopPropagation()}
+        >
           {part}
-        </span>
+        </Link>
       );
     }
     return part;
@@ -150,9 +157,21 @@ function CommentItem({
         <Avatar url={comment.author?.avatar_path} name={comment.author?.name} size={8} />
         <div className="flex-1 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl px-3 py-2 text-left">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-extrabold text-zinc-900 dark:text-zinc-100">
-              {comment.author?.name ?? 'Unknown'}
-            </span>
+            {comment.author?.username ? (
+              <Link
+                href={`/users/${comment.author.username}`}
+                className="no-underline"
+                onClick={e => e.stopPropagation()}
+              >
+                <span className="text-xs font-extrabold text-zinc-900 dark:text-zinc-100 hover:text-[#b46d23] transition">
+                  {comment.author?.name ?? 'Unknown'}
+                </span>
+              </Link>
+            ) : (
+              <span className="text-xs font-extrabold text-zinc-900 dark:text-zinc-100">
+                {comment.author?.name ?? 'Unknown'}
+              </span>
+            )}
             <span className="text-[10px] text-zinc-400">{timeAgo(comment.created_at)}</span>
           </div>
 
@@ -476,14 +495,44 @@ export const PostCard: React.FC<PostCardProps> = ({
       {showAuthor && (
         <div className="p-4 sm:p-5 flex items-start justify-between gap-3">
           <div className="flex gap-3">
-            <Avatar url={post.author?.avatar_path} name={post.author?.name} size={11} />
+            {/* Clickable avatar → public profile */}
+            {post.author?.username ? (
+              <Link
+                href={`/users/${post.author.username}`}
+                className="no-underline shrink-0"
+                onClick={e => e.stopPropagation()}
+              >
+                <Avatar url={post.author?.avatar_path} name={post.author?.name} size={11} />
+              </Link>
+            ) : (
+              <Avatar url={post.author?.avatar_path} name={post.author?.name} size={11} />
+            )}
             <div>
               <div className="flex items-baseline gap-1.5 flex-wrap">
-                <h4 className="text-[15px] font-extrabold text-zinc-900 dark:text-zinc-100 hover:text-[#b46d23] transition cursor-pointer">
-                  {post.author?.name ?? 'Unknown'}
-                </h4>
+                {/* Clickable name → public profile */}
+                {post.author?.username ? (
+                  <Link
+                    href={`/users/${post.author.username}`}
+                    className="no-underline"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <h4 className="text-[15px] font-extrabold text-zinc-900 dark:text-zinc-100 hover:text-[#b46d23] transition cursor-pointer">
+                      {post.author?.name ?? 'Unknown'}
+                    </h4>
+                  </Link>
+                ) : (
+                  <h4 className="text-[15px] font-extrabold text-zinc-900 dark:text-zinc-100">
+                    {post.author?.name ?? 'Unknown'}
+                  </h4>
+                )}
                 {post.author?.username && (
-                  <span className="text-[10px] text-zinc-400 font-medium">@{post.author.username}</span>
+                  <Link
+                    href={`/users/${post.author.username}`}
+                    className="no-underline"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <span className="text-[10px] text-zinc-400 font-medium hover:text-[#b46d23] transition">@{post.author.username}</span>
+                  </Link>
                 )}
                 <span className="text-[10px] text-zinc-400">·</span>
                 <span className="text-[10px] text-zinc-400">{timeAgo(post.created_at)}</span>

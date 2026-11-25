@@ -11,6 +11,7 @@ use App\Http\Controllers\PostBookmarkController;
 use App\Http\Controllers\FollowController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\PublicProfileController;
 
 Route::get('/', function () {
     return Inertia::render('welcome');
@@ -78,6 +79,12 @@ Route::middleware(['auth'])->group(function () {
     // ── Shares ──────────────────────────────────────────────────────────────
     Route::post('/posts/{post}/share', [TimeCapsuleController::class, 'share'])
         ->name('posts.share');
+
+    // ── Public User Profiles (by username) ──────────────────────────────────
+    // IMPORTANT: This must be placed BEFORE the /users/{user}/follow, /followers, /following routes
+    Route::get('/users/{username}', [PublicProfileController::class, 'show'])
+        ->name('users.profile')
+        ->where('username', '[a-zA-Z0-9_.\-]+');
 
     // ── Follows & Mentions ──────────────────────────────────────────────────
     Route::post('/users/{user}/follow', [FollowController::class, 'toggle'])
