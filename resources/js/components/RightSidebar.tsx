@@ -1,5 +1,8 @@
 import React from 'react';
 import { Link, usePage } from '@inertiajs/react';
+import { Heart, Trophy, Star } from 'lucide-react';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface RecentPost {
   id: number;
@@ -24,6 +27,22 @@ interface SuggestedUser {
   posts_count: number;
 }
 
+interface TopPrediction {
+  id: number;
+  post_content: string | null;
+  likes_count: number;
+  created_at: string;
+  thumbnail: string | null;
+  author: {
+    id: number;
+    name: string;
+    username: string | null;
+    avatar_path: string | null;
+  } | null;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function timeAgo(dateStr: string): string {
   const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
   if (diff < 60) return `${diff}s ago`;
@@ -32,15 +51,126 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
+function Avatar({ url, name, size = 8 }: { url?: string | null; name: string; size?: number }) {
+  const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const cls = `w-${size} h-${size} rounded-full flex items-center justify-center text-xs font-bold text-white bg-gradient-to-br from-[#b46d23] to-[#804c15] shrink-0 overflow-hidden border border-zinc-100 dark:border-zinc-700`;
+  return url ? (
+    <img src={url} alt={name} className={`w-${size} h-${size} rounded-full object-cover shrink-0 border border-zinc-100 dark:border-zinc-700`} />
+  ) : (
+    <div className={cls}>{initials}</div>
+  );
+}
+
+// ── Top Prediction Card ───────────────────────────────────────────────────────
+
+function TopPredictionCard({
+  prediction,
+  label,
+  icon,
+  emptyMessage,
+}: {
+  prediction: TopPrediction | null;
+  label: string;
+  icon: React.ReactNode;
+  emptyMessage: string;
+}) {
+  return (
+    <div className="bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-2xl p-5 shadow-sm space-y-3">
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <span className="text-[#b46d23]">{icon}</span>
+        <h3 className="text-sm font-black text-zinc-900 dark:text-zinc-100 tracking-tight">{label}</h3>
+      </div>
+
+      {prediction ? (
+        <Link
+          href={`/posts/${prediction.id}`}
+          className="block no-underline group"
+        >
+          <div className="flex gap-3 items-start">
+            {/* Thumbnail or emoji placeholder */}
+            <div className="w-14 h-14 rounded-xl overflow-hidden bg-zinc-100 dark:bg-zinc-800 shrink-0 border border-zinc-100 dark:border-zinc-700 flex items-center justify-center">
+              {prediction.thumbnail ? (
+                <img
+                  src={prediction.thumbnail}
+                  alt="Prediction"
+                  className="w-full h-full object-cover group-hover:scale-105 transition duration-200"
+                />
+              ) : (
+                <span className="text-xl">🔮</span>
+              )}
+            </div>
+
+            <div className="flex-1 min-w-0">
+              {/* Post content preview */}
+              <p className="text-[13px] font-bold text-zinc-800 dark:text-zinc-200 group-hover:text-[#b46d23] transition-colors leading-snug line-clamp-2">
+                {prediction.post_content
+                  ? prediction.post_content.replace(/#\w+/g, '').trim() || 'Prediction post'
+                  : '📷 Photo prediction'}
+              </p>
+
+              {/* Author row */}
+              {prediction.author && (
+                <div className="flex items-center gap-1.5 mt-1.5">
+                  <Avatar url={prediction.author.avatar_path} name={prediction.author.name} size={5} />
+                  <span className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium truncate">
+                    {prediction.author.name}
+                    {prediction.author.username && (
+                      <span className="text-zinc-400"> @{prediction.author.username}</span>
+                    )}
+                  </span>
+                </div>
+              )}
+
+              {/* Likes badge + time */}
+              <div className="flex items-center gap-3 mt-1.5">
+                <div className="flex items-center gap-1 text-[11px] font-extrabold text-[#b46d23]">
+                  <Heart className="w-3 h-3 fill-[#b46d23]" />
+                  <span>{prediction.likes_count} like{prediction.likes_count !== 1 ? 's' : ''}</span>
+                </div>
+                <span className="text-[11px] text-zinc-400">{timeAgo(prediction.created_at)}</span>
+              </div>
+            </div>
+          </div>
+        </Link>
+      ) : (
+        <div className="py-4 text-center">
+          <p className="text-[12px] text-zinc-400 font-medium leading-relaxed">{emptyMessage}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Sidebar ──────────────────────────────────────────────────────────────
+
 export const RightSidebar: React.FC = () => {
   const { props } = usePage<any>();
 
-  const recentPosts: RecentPost[]       = (props as any).recentPosts      ?? [];
-  const trendingHashtags: TrendingHashtag[] = (props as any).trendingHashtags ?? [];
-  const suggestedUsers: SuggestedUser[] = (props as any).suggestedUsers   ?? [];
+  const recentPosts: RecentPost[]           = (props as any).recentPosts       ?? [];
+  const trendingHashtags: TrendingHashtag[] = (props as any).trendingHashtags  ?? [];
+  const suggestedUsers: SuggestedUser[]     = (props as any).suggestedUsers    ?? [];
+  const topOfDay: TopPrediction | null      = (props as any).topOfDay          ?? null;
+  const topOfMonth: TopPrediction | null    = (props as any).topOfMonth        ?? null;
 
   return (
     <div className="space-y-4 text-left">
+
+      {/* ── Block 0: Top Prediction of the Day ───────────────────────────── */}
+      <TopPredictionCard
+        prediction={topOfDay}
+        label="Top Prediction of the Day"
+        icon={<Trophy className="w-4 h-4" />}
+        emptyMessage="No predictions posted today yet. Be the first to share one!"
+      />
+
+      {/* ── Block 0b: Top Prediction of the Month ────────────────────────── */}
+      <TopPredictionCard
+        prediction={topOfMonth}
+        label="Top Prediction of the Month"
+        icon={<Star className="w-4 h-4" />}
+        emptyMessage={`No predictions posted in ${new Date().toLocaleString('default', { month: 'long' })} yet.`}
+      />
 
       {/* ── Block 1: Recent Posts ─────────────────────────────────────────── */}
       {recentPosts.length > 0 && (
@@ -100,7 +230,7 @@ export const RightSidebar: React.FC = () => {
           <div className="space-y-3">
             {suggestedUsers.map((u) => (
               <div key={u.id} className="flex items-center gap-3">
-                <Link href={`/profile`} className="shrink-0 no-underline">
+                <Link href={u.username ? `/users/${u.username}` : `/profile`} className="shrink-0 no-underline">
                   <div className="w-9 h-9 rounded-full overflow-hidden bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-600 dark:text-zinc-300">
                     {u.avatar_path ? (
                       <img src={u.avatar_path} alt={u.name} className="w-full h-full object-cover" />

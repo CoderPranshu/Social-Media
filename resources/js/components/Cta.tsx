@@ -14,9 +14,15 @@ const Cta = () => {
             </p>
        
             <div className="pt-1">
-              <button className="w-full sm:w-auto bg-[#A26227] hover:bg-[#8F531E] text-white text-xs md:text-sm font-bold px-5 py-3 rounded-xl transition-all shadow-md active:scale-95">
+              {/* <button className="w-full sm:w-auto bg-[#A26227] hover:bg-[#8F531E] text-white text-xs md:text-sm font-bold px-5 py-3 rounded-xl transition-all shadow-md active:scale-95">
                 Register Now
-              </button>
+              </button> */}
+               <a
+                  href="/register"
+                  className="w-full sm:w-auto bg-[#A26227] hover:bg-[#8F531E] text-white text-xs md:text-sm font-bold px-5 py-3 rounded-xl transition-all shadow-md active:scale-95"
+                >
+                     Sign up
+                </a>              
             </div>
           </div>
           

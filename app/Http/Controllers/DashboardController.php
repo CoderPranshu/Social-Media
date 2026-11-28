@@ -7,6 +7,7 @@ use App\Models\Hashtag;
 use App\Models\TimeCapsule;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -87,11 +88,62 @@ class DashboardController extends Controller
                 'posts_count'     => (int) $u->posts_count,
             ]);
 
+        // ── 5. Top Prediction of the Day ─────────────────────────────────────
+        // "Most liked public prediction posted today", ranked by relational time_likes count.
+        $topOfDay = $this->topPrediction(
+            Carbon::today(),
+            Carbon::today()->endOfDay()
+        );
+
+        // ── 6. Top Prediction of the Month ───────────────────────────────────
+        // "Most liked public prediction posted this calendar month".
+        $topOfMonth = $this->topPrediction(
+            Carbon::now()->startOfMonth(),
+            Carbon::now()->endOfMonth()
+        );
+
         return Inertia::render('dashboard', [
-            'userStats'       => $userStats,
-            'recentPosts'     => $recentPosts,
+            'userStats'        => $userStats,
+            'recentPosts'      => $recentPosts,
             'trendingHashtags' => $trendingHashtags,
-            'suggestedUsers'  => $suggestedUsers,
+            'suggestedUsers'   => $suggestedUsers,
+            'topOfDay'         => $topOfDay,
+            'topOfMonth'       => $topOfMonth,
         ]);
     }
+
+    // ── Helper: fetch the most-liked published public post within a date range ──
+    private function topPrediction(Carbon $from, Carbon $to): ?array
+    {
+        $post = TimeCapsule::with(['user', 'images'])
+            ->withCount('likes')   // counts rows in time_likes via the existing relationship
+            ->where('status', 'published')
+            ->where('visibility', 'public')
+            ->whereBetween('created_at', [$from, $to])
+            ->orderByDesc('likes_count')
+            ->first();
+
+        if (! $post) {
+            return null;
+        }
+
+        $imageUrls = $post->allImageUrls();
+
+        return [
+            'id'           => $post->id,
+            'post_content' => $post->post_content,
+            'likes_count'  => (int) $post->likes_count,
+            'created_at'   => $post->created_at,
+            'thumbnail'    => $imageUrls[0] ?? null,
+            'author' => $post->user ? [
+                'id'         => $post->user->id,
+                'name'       => $post->user->name,
+                'username'   => $post->user->username,
+                'avatar_path' => $post->user->avatar_path
+                    ? Storage::disk('public')->url($post->user->avatar_path)
+                    : null,
+            ] : null,
+        ];
+    }
 }
+

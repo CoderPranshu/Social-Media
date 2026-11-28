@@ -18,7 +18,6 @@ Route::get('/', function () {
 })->name('home');
 
 
-
 Route::middleware(['auth'])->group(function () {
 
     Route::get('/profile', [SocialProfileController::class, 'show'])
